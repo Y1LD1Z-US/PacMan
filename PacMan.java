@@ -4,24 +4,7 @@ import java.util.HashSet;
 import java.util.Random;
 import javax.swing.*;
 
-/**
- * CSC-301 Program 3 – Pac-Man Ghost AI
- *
- * Authors: Murat Yildiz, [Partner Name]
- * Date: [Month Year]
- *
- * Starting code:
- *   Nipuna Lakruwan, "PacMan Java Game" (MIT License),
- *   GitHub repository: https://github.com/Nipuna-Lakruwan/PacMan-Java-Game
- *
- * Reference for graph-based pathfinding (BFS, A*) and
- * Pac-Man-style ghost navigation:
- *
- *   [Authors],
- *   "[Paper Title],"
- *   [Venue], [Year].
- *   // Fill this in from your pacman ghosts paper PDF
- */
+
 public class PacMan extends JPanel implements ActionListener, KeyListener {
 
     class Block {
