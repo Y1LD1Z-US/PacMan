@@ -19,7 +19,9 @@ public class PacMan extends JPanel implements ActionListener, KeyListener {
         int velocityX = 0;
         int velocityY = 0;
 
-        Block(Image image, int x, int y, int width, int height) {
+        int speed; // individual speed
+
+        Block(Image image, int x, int y, int width, int height, int speed) {
             this.image = image;
             this.x = x;
             this.y = y;
@@ -27,6 +29,7 @@ public class PacMan extends JPanel implements ActionListener, KeyListener {
             this.height = height;
             this.startX = x;
             this.startY = y;
+            this.speed = speed;
         }
 
         void updateDirection(char direction) {
@@ -34,17 +37,15 @@ public class PacMan extends JPanel implements ActionListener, KeyListener {
             updateVelocity();
         }
 
-        // *** FIXED SPEED ***
         void updateVelocity() {
-            int speed = tileSize / 4;
-
             switch (this.direction) {
-                case 'U' -> { velocityX = 0; velocityY = -speed; }
-                case 'D' -> { velocityX = 0; velocityY =  speed; }
-                case 'L' -> { velocityX = -speed; velocityY = 0; }
-                case 'R' -> { velocityX =  speed; velocityY = 0; }
+                case 'U' -> { velocityX = 0;       velocityY = -speed; }
+                case 'D' -> { velocityX = 0;       velocityY =  speed; }
+                case 'L' -> { velocityX = -speed;  velocityY = 0;      }
+                case 'R' -> { velocityX =  speed;  velocityY = 0;      }
             }
         }
+
         void reset() {
             this.x = this.startX;
             this.y = this.startY;
@@ -54,6 +55,10 @@ public class PacMan extends JPanel implements ActionListener, KeyListener {
     private int rowCount = 21;
     private int columnCount = 19;
     private int tileSize = 32;
+
+    // Speeds
+    private final int PACMAN_SPEED = tileSize / 8 * 2; // slower than before
+    private final int GHOST_SPEED  = tileSize / 8 * 2; // keep ghosts faster
 
     private int boardWidth  = columnCount * tileSize;
     private int boardHeight = rowCount * tileSize;
@@ -116,6 +121,9 @@ public class PacMan extends JPanel implements ActionListener, KeyListener {
     // counter for Inky's hybrid behavior
     int inkyStepCounter = 0;
 
+    //requested direction for smoother turns
+    private char requestedDirection = 'R';
+
     class Node {
         int row, col;
         java.util.List<Node> neighbors = new java.util.ArrayList<>();
@@ -173,37 +181,39 @@ public class PacMan extends JPanel implements ActionListener, KeyListener {
                 int y = r * tileSize;
 
                 switch (tile) {
-                    case 'X' -> walls.add(new Block(wallImage, x, y, tileSize, tileSize));
+                    case 'X' -> walls.add(new Block(wallImage, x, y, tileSize, tileSize, 0));
 
                     case 'r' -> {
-                        Block bl = new Block(redGhostImage, x, y, tileSize, tileSize);
+                        Block bl = new Block(redGhostImage, x, y, tileSize, tileSize, GHOST_SPEED);
                         bl.ghostName = "blinky";
                         ghosts.add(bl);
                     }
 
                     case 'p' -> {
-                        Block pk = new Block(pinkGhostImage, x, y, tileSize, tileSize);
+                        Block pk = new Block(pinkGhostImage, x, y, tileSize, tileSize, GHOST_SPEED);
                         pk.ghostName = "pinky";
                         ghosts.add(pk);
                     }
 
                     case 'b' -> {
-                        Block in = new Block(blueGhostImage, x, y, tileSize, tileSize);
+                        Block in = new Block(blueGhostImage, x, y, tileSize, tileSize, GHOST_SPEED);
                         in.ghostName = "inky";
                         ghosts.add(in);
                     }
 
                     case 'o' -> {
-                        Block cl = new Block(orangeGhostImage, x, y, tileSize, tileSize);
+                        Block cl = new Block(orangeGhostImage, x, y, tileSize, tileSize, GHOST_SPEED);
                         cl.ghostName = "clyde";
                         ghosts.add(cl);
                     }
 
                     case 'P' -> {
-                        pacman = new Block(pacmanRightImage, x, y, tileSize, tileSize);
+                        pacman = new Block(pacmanRightImage, x, y, tileSize, tileSize, PACMAN_SPEED);
+                        pacman.direction = 'R';
+                        pacman.updateVelocity();
                     }
 
-                    case ' ' -> foods.add(new Block(null, x + 14, y + 14, 4, 4));
+                    case ' ' -> foods.add(new Block(null, x + 14, y + 14, 4, 4, 0));
                 }
             }
         }
@@ -227,10 +237,10 @@ public class PacMan extends JPanel implements ActionListener, KeyListener {
             for (int c = 0; c < columnCount; c++) {
                 if (graph[r][c] == null) continue;
 
-                if (r > 0             && graph[r - 1][c] != null) graph[r][c].neighbors.add(graph[r - 1][c]);
-                if (r < rowCount - 1 && graph[r + 1][c] != null) graph[r][c].neighbors.add(graph[r + 1][c]);
-                if (c > 0             && graph[r][c - 1] != null) graph[r][c].neighbors.add(graph[r][c - 1]);
-                if (c < columnCount - 1 && graph[r][c + 1] != null) graph[r][c].neighbors.add(graph[r][c + 1]);
+                if (r > 0               && graph[r - 1][c] != null)     graph[r][c].neighbors.add(graph[r - 1][c]);
+                if (r < rowCount - 1    && graph[r + 1][c] != null)     graph[r][c].neighbors.add(graph[r + 1][c]);
+                if (c > 0               && graph[r][c - 1] != null)     graph[r][c].neighbors.add(graph[r][c - 1]);
+                if (c < columnCount - 1 && graph[r][c + 1] != null)     graph[r][c].neighbors.add(graph[r][c + 1]);
             }
         }
     }
@@ -411,11 +421,44 @@ public class PacMan extends JPanel implements ActionListener, KeyListener {
     }
 
     // ---------------------------------------------------------
+    // TILE-COLLISION CHECK FOR PACMAN TURNS
+    // ---------------------------------------------------------
+    private boolean canMove(Block b, char dir) {
+        int r = b.y / tileSize;
+        int c = b.x / tileSize;
+
+        switch (dir) {
+            case 'U' -> r--;
+            case 'D' -> r++;
+            case 'L' -> c--;
+            case 'R' -> c++;
+        }
+
+        // Out of bounds
+        if (r < 0 || r >= rowCount || c < 0 || c >= columnCount) return false;
+
+        // Can't move into a wall
+        return tileMap[r].charAt(c) != 'X';
+    }
+
+    // ---------------------------------------------------------
     // MOVE PACMAN
     // ---------------------------------------------------------
     private void movePacman() {
+        // If Pac-Man is exactly on a tile, try to apply the requested turn
+        if (pacman.x % tileSize == 0 && pacman.y % tileSize == 0) {
+            if (canMove(pacman, requestedDirection)) {
+                if (pacman.direction != requestedDirection) {
+                    pacman.updateDirection(requestedDirection);
+                    updatePacmanImage();
+                }
+            }
+        }
+
+        // Move in current direction
         pacman.x += pacman.velocityX;
         pacman.y += pacman.velocityY;
+
         checkWallCollision(pacman);
     }
 
@@ -716,13 +759,13 @@ public class PacMan extends JPanel implements ActionListener, KeyListener {
             restartGame();
             return;
         }
+
         switch (e.getKeyCode()) {
-            case KeyEvent.VK_UP    -> pacman.updateDirection('U');
-            case KeyEvent.VK_DOWN  -> pacman.updateDirection('D');
-            case KeyEvent.VK_LEFT  -> pacman.updateDirection('L');
-            case KeyEvent.VK_RIGHT -> pacman.updateDirection('R');
+            case KeyEvent.VK_UP    -> requestedDirection = 'U';
+            case KeyEvent.VK_DOWN  -> requestedDirection = 'D';
+            case KeyEvent.VK_LEFT  -> requestedDirection = 'L';
+            case KeyEvent.VK_RIGHT -> requestedDirection = 'R';
         }
-        updatePacmanImage();
     }
 
     private void updatePacmanImage() {
@@ -741,6 +784,11 @@ public class PacMan extends JPanel implements ActionListener, KeyListener {
         score = 0;
         lives = 3;
         gameOver = false;
+
+        requestedDirection = 'R';
+        pacman.updateDirection('R');
+        updatePacmanImage();
+
         gameLoop.start();
     }
 }
